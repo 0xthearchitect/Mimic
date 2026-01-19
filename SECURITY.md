@@ -209,11 +209,10 @@ iptables -A OUTPUT -j DROP
 
 ### Security Updates
 
-**Version 1.0.0 (2025-12-24)**
+**Version 1.1.3 (2025-12-31)**
 - Initial release
 - SSH, FTP, HTTP, Telnet, MySQL emulation
 - JSON logging with credential capture
-- OS template simulation
 - Visual configurator with security warnings
 
 ---
@@ -239,4 +238,5 @@ We thank the security research community for responsible disclosure practices an
 *Deploy responsibly. Monitor vigilantly. Report ethically.*
 
 </div>
+
 
