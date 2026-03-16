@@ -381,8 +381,8 @@ Found a security vulnerability? Please see [SECURITY.md](SECURITY.md) for report
 ## Contact
 
 **Author:** The Architect  
-**GitHub:** [@Samucahub](https://github.com/Samucahub)  
-**Project:** [MIMIC Honeypot](https://github.com/Samucahub/mimic)
+**GitHub:** [@thearchitect](https://github.com/0xthearchitect)  
+**Project:** [MIMIC Honeypot](https://github.com/0xthearchitect/mimic)
 
 ---
 
