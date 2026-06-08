@@ -12,7 +12,7 @@
 
 **On stage, everyone thinks they're the star. But the only thing they are, is the show.**
 
-*Every door is a mask. The audience is watching.*
+*Every port is a mask. The audience is watching.*
 
 </div>
 
