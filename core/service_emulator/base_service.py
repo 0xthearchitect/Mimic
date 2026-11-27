@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any
 import logging
 
+from core import blocklist
 from log_system import events
 
 class BaseService(ABC):
@@ -32,7 +33,7 @@ class BaseService(ABC):
         
         try:
             self.server = await asyncio.start_server(
-                self.handle_connection,
+                self._guarded_connection,
                 host='0.0.0.0',
                 port=self.port,
                 reuse_address=True
@@ -48,6 +49,21 @@ class BaseService(ABC):
             self.logger.error(f"Failed to start {self.name}: {e}")
             raise
     
+    async def _guarded_connection(self, reader: asyncio.StreamReader,
+                                  writer: asyncio.StreamWriter):
+        """Refuse IPs the operator blocked before the service says a word."""
+        peer = writer.get_extra_info('peername')
+        ip = peer[0] if peer else None
+        if ip and blocklist.is_blocked(ip):
+            self.log_event(events.BLOCKED_CONNECTION, ip, reason="operator blocklist")
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except (ConnectionError, OSError):
+                pass
+            return
+        await self.handle_connection(reader, writer)
+
     async def stop(self):
         self.is_running = False
         self.logger.info(f"Stopping {self.name} on port {self.port}")

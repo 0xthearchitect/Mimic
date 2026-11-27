@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from core import blocklist
 from log_system import events
 
 class SSHService:
@@ -77,6 +78,7 @@ class SSHService:
         print(f"[SSH] Logs: {self.log_file}")
         
         self.is_running = True
+        self.start_error = None
         
         try:
             key_path = Path("logs/ssh_host_key")
@@ -119,10 +121,12 @@ class SSHService:
                 print(f"[SSH] ERROR: Server is None!")
                 
         except asyncssh.Error as e:
+            self.start_error = f"SSH error: {e}"
             print(f"[SSH] AsyncSSH Error: {e}")
             import traceback
             traceback.print_exc()
         except OSError as e:
+            self.start_error = f"Cannot open port {self.port}: {e.strerror or e}"
             print(f"[SSH] OSError: {e}")
             if e.errno == 10013:
                 print(f"[SSH] ⚠ Port {self.port} requires Administrator privileges")
@@ -173,7 +177,16 @@ class SSHServer(asyncssh.SSHServer):
     def connection_made(self, conn):
         self.conn = conn
         client_ip = conn.get_extra_info('peername')[0]
-        
+
+        if blocklist.is_blocked(client_ip):
+            self.ssh_service.log_event("blocked_connection", {
+                "client_ip": client_ip,
+                "reason": "operator blocklist"
+            })
+            self.connection_closed = True
+            conn.abort()
+            return
+
         if self.ssh_service.security and self.ssh_service.security_enabled:
             if not self.ssh_service.security.is_ip_allowed(client_ip):
                 print(f"[SECURITY] Blocked connection from {client_ip} - aborting")

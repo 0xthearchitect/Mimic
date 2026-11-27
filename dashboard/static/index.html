@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Mimic</title>
+<link rel="icon" href="/static/mask.png">
+<link rel="stylesheet" href="/static/app.css">
+<script type="module" src="/static/js/app.js"></script>
+</head>
+<body class="closed">
+<div class="valance" aria-hidden="true"></div>
+<div class="house-frame">
+  <div class="curtain" aria-hidden="true"></div>
+  <div class="frame-body">
+    <header>
+      <div class="bar">
+        <a class="brand" href="#stage"><img src="/static/mask.png" alt=""><span>Mimic</span></a>
+        <nav class="main" aria-label="Main">
+          <a href="#stage" data-view="stage">The Stage</a>
+          <a href="#playbill" data-view="playbill">Playbill</a>
+          <a href="#lostfound" data-view="lostfound">Lost &amp; Found</a>
+        </nav>
+        <span class="spacer"></span>
+        <span class="state" id="state" role="status">…</span>
+        <button type="button" class="pill" id="stop" hidden>Close the curtains</button>
+        <a class="pill go" id="open" href="#playbill" hidden>Open the curtains</a>
+      </div>
+    </header>
+
+    <!-- THE STAGE: what is happening right now -->
+    <main id="view-stage" hidden>
+      <section class="hero">
+        <p class="label" id="running" style="letter-spacing:.22em"></p>
+        <h1 class="marquee" id="headline">The audience is watching.</h1>
+        <div class="tickets">
+          <div class="ticket"><span class="main-part"><span class="k">IN THE HOUSE</span><span class="v" id="n-visitors">0</span></span><span class="stub">different IPs<br>last 24 h</span></div>
+          <div class="ticket"><span class="main-part"><span class="k">LINES TRIED</span><span class="v" id="n-tries">0</span></span><span class="stub">passwords<br>last 24 h</span></div>
+          <a class="ticket danger" href="#lostfound"><span class="main-part"><span class="k">PROPS LEFT BEHIND</span><span class="v" id="n-files">0</span></span><span class="stub">files, all time<br>see →</span></a>
+        </div>
+      </section>
+      <div class="stage-grid">
+        <section class="script" aria-labelledby="script-h">
+          <div class="rule"><h2 class="section" id="script-h">The script</h2><span class="mono muted" style="font-size:13px">written live · newest scene first · one scene = one visitor on one door</span></div>
+          <div id="scenes"></div>
+        </section>
+        <section class="house" aria-labelledby="house-h">
+          <div class="rule"><h2 class="section" id="house-h">The house</h2><span class="mono muted" style="font-size:13px">last 24 h</span></div>
+          <p class="rule-text">Each seat is a visitor. <em>The closer to the stage, the deeper they got.</em></p>
+          <p class="muted" style="margin:0;font-size:14px">Row = how far they went. Seats fill left to right in order of arrival. Colour = how the door treated them. Pick a seat to read their ticket.</p>
+          <div class="legend"><span><i style="background:var(--in)"></i>got in</span><span><i style="background:var(--out)"></i>refused</span><span><i style="background:var(--knock)"></i>only knocked</span><span><i style="background:var(--knock);opacity:.35"></i>shown out (blocked)</span></div>
+          <div class="hall" id="hall"></div>
+          <div id="seat-ticket"></div>
+        </section>
+      </div>
+    </main>
+
+    <!-- PLAYBILL: what the honeypot pretends to be -->
+    <main id="view-playbill" hidden>
+      <div class="playbill-grid">
+        <article class="programme">
+          <form id="playbill" novalidate>
+            <fieldset id="pb-fields">
+              <legend class="sr">Honeypot configuration</legend>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:10px;width:100%">
+                <span class="label">MIMIC PRESENTS</span>
+                <label style="width:100%;display:flex;justify-content:center"><span class="sr">Server name (hostname), the show's title</span>
+                  <input class="title-input" name="hostname" autocomplete="off" spellcheck="false" maxlength="63"></label>
+                <span class="serif muted" style="font-size:22px">a play in one machine, staged on
+                  <select class="inline-select serif" name="os_template" aria-label="Operating system" style="font:italic 22px var(--serif)"><option value="Ubuntu">Ubuntu</option></select></span>
+              </div>
+              <div class="fleuron" aria-hidden="true"><span></span>✦<span></span></div>
+              <h2 class="label">STARRING</h2>
+              <div class="starring">
+                <label><span class="sr">Username</span><input class="inline-input serif" name="username" autocomplete="off" spellcheck="false" style="width:200px;font-size:34px"></label>
+                <span class="serif muted" style="font-style:italic;font-size:24px">whose secret word is</span>
+                <label><span class="sr">Password</span><input class="inline-input mono" name="password" autocomplete="off" spellcheck="false" style="width:190px;font-size:26px"></label>
+              </div>
+              <p class="muted" style="margin:0;font-size:14px">The account the honeypot pretends to have. Attackers who guess it always get in.</p>
+              <div class="fleuron" aria-hidden="true"><span></span>✦<span></span></div>
+              <h2 class="label">HOUSE RULES</h2>
+              <div class="modes" role="radiogroup" aria-label="Who gets in">
+                <button type="button" class="mode" role="radio" data-any="true"><span class="t">Open house</span><span class="x">Any username and password gets in. You see what attackers do once inside.</span></button>
+                <button type="button" class="mode" role="radio" data-any="false"><span class="t">Invitation only</span><span class="x">Only the starring account gets in. You see which passwords they try.</span></button>
+              </div>
+              <label class="serif muted" id="hard-to-get" style="font-style:italic;font-size:20px">…but play hard to get: refuse the first
+                <input class="inline-input mono" name="brute_force_attempts" type="number" min="1" max="50" style="width:56px;font-size:18px"> tries.</label>
+              <div class="fleuron" aria-hidden="true"><span></span>✦<span></span></div>
+              <h2 class="label">THE CAST</h2>
+              <p class="muted" style="margin:0;font-size:14px">Each door the honeypot opens. Turn one off and nobody can knock on it.</p>
+              <ul class="cast" id="cast"></ul>
+              <details class="backstage">
+                <summary>Backstage: ports, banners and door security</summary>
+                <div class="grid" id="backstage"></div>
+              </details>
+            </fieldset>
+            <ul class="errors" id="pb-errors" role="alert"></ul>
+            <button type="submit" class="ticket launch" id="launch"><span class="main-part"><span class="k" id="launch-k">OPENING NIGHT</span><span class="big" id="launch-t">Let the show begin</span></span><span class="stub" id="launch-s">ADMIT<br>ALL</span></button>
+            <ul class="results" id="pb-results" aria-live="polite"></ul>
+          </form>
+        </article>
+        <aside class="rehearsal">
+          <h2 class="serif" style="margin:0;font-weight:400;font-size:32px;line-height:1.1">Dress rehearsal</h2>
+          <p class="muted" style="margin:0">What an attacker sees when they connect over SSH. Edit the playbill and watch it change.</p>
+          <div class="terminal"><div class="dots" aria-hidden="true"><i></i><i></i><i></i></div><pre id="rehearsal"></pre></div>
+        </aside>
+      </div>
+    </main>
+
+    <!-- LOST & FOUND: what they left behind -->
+    <main id="view-lostfound" hidden>
+      <div class="lf-grid">
+        <section class="rack" aria-labelledby="rack-h">
+          <div class="rule"><h2 class="section" id="rack-h">Lost &amp; Found</h2><span class="mono muted" style="font-size:13px">files uploaded by visitors · one tag per unique file</span></div>
+          <p class="muted" style="margin:0">A tag hangs more crooked the more times that same file was left. Pick one to read its claim ticket.</p>
+          <div class="tags" id="tags"></div>
+        </section>
+        <aside class="claim" id="claim"></aside>
+      </div>
+      <section class="letterboard" aria-labelledby="lb-h">
+        <div class="bulbs" aria-hidden="true" id="bulbs"></div>
+        <h2 class="serif" id="lb-h" style="margin:16px 0 0;font-weight:400;font-size:36px;text-align:center">The lines they rehearsed</h2>
+        <p class="muted" style="margin:4px 0 0;text-align:center">The six username / password pairs tried most often, all time. Bar length = how often.</p>
+        <ol id="creds"></ol>
+      </section>
+    </main>
+  </div>
+  <div class="curtain right" aria-hidden="true"></div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+</body>
+</html>
