@@ -102,6 +102,10 @@ class Dashboard:
         resp.headers["X-Frame-Options"] = "DENY"
         if request.path.startswith("/api/"):
             resp.headers["Cache-Control"] = "no-store"
+        else:
+            # Revalidate (cheap 304s via Last-Modified) so an updated MIMIC never
+            # runs yesterday's JavaScript from the browser cache.
+            resp.headers["Cache-Control"] = "no-cache"
         return resp
 
     # --- lifecycle -----------------------------------------------------------
