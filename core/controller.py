@@ -1,11 +1,15 @@
 import asyncio
 import importlib
+import os
 import shutil
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, NamedTuple
+from typing import Any, Dict, List, NamedTuple, Optional
 
 import yaml
 
+from core import blocklist
 from core.config_schema import check_config
 from core.security_layer import SecurityLayer
 from log_system.session_logger import SessionLogger
@@ -32,14 +36,22 @@ PLANNED_SERVICES = {"rdp"}
 
 EXAMPLE_CONFIG = Path("config/honeypot.example.yaml")
 
+# A healthy service task never finishes; one that ends this soon after
+# start failed to open its port.
+STARTUP_GRACE_SECONDS = 0.3
+
 
 class MIMICController:
     def __init__(self, config_path: str = "config/honeypot.yaml"):
+        self.config_path = Path(config_path)
         self.config = self.load_config(config_path)
         self.security = SecurityLayer(self.config.get('security', {}))
         self.logger = SessionLogger()
         self.services = {}
         self.running = False
+        self.started_at: Optional[datetime] = None
+
+    # --- Configuration -----------------------------------------------------
 
     def load_config(self, path: str) -> Dict[str, Any]:
         config_path = Path(path)
@@ -49,6 +61,29 @@ class MIMICController:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
         return check_config(config, SERVICE_REGISTRY, PLANNED_SERVICES)
+
+    def save_config(self, config: Dict[str, Any]) -> None:
+        """Validate, then atomically replace the config file. Only while stopped,
+        so running services never disagree with the file."""
+        if self.running:
+            raise RuntimeError("Stop the honeypot before changing its configuration")
+        check_config(config, SERVICE_REGISTRY, PLANNED_SERVICES)
+
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=self.config_path.parent, suffix=".yaml.tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
+            os.replace(tmp, self.config_path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+
+        self.config = config
+        old_cleanup = getattr(self.security, "cleanup_task", None)
+        if old_cleanup:
+            old_cleanup.cancel()
+        self.security = SecurityLayer(config.get('security', {}) or {})
 
     def build_service_config(self, service_config: Dict[str, Any]) -> Dict[str, Any]:
         """Service config plus the global identity/options every emulator may use."""
@@ -72,6 +107,8 @@ class MIMICController:
             config['sftp_redirect_port'] = 2223
         return config
 
+    # --- Lifecycle ---------------------------------------------------------
+
     def create_service(self, port: int, service_config: Dict[str, Any]):
         service_type = service_config.get('type', '')
         spec = SERVICE_REGISTRY[service_type]
@@ -81,24 +118,38 @@ class MIMICController:
             return service_cls(port, config, self.security)
         return service_cls(port, config)
 
-    async def start_service(self, port: int, service_config: Dict):
+    async def start_service(self, port: int, service_config: Dict) -> Dict[str, Any]:
         service_type = service_config.get('type', 'generic')
+        result = {"type": service_type, "port": port, "ok": False, "error": None}
 
         if service_type in PLANNED_SERVICES:
+            result["error"] = "not implemented yet"
             print(f"[!] {service_type} on port {port} is not implemented yet - skipped")
-            return
+            return result
 
         try:
             service = self.create_service(port, service_config)
             service.server_task = asyncio.create_task(service.start())
+            await asyncio.sleep(STARTUP_GRACE_SECONDS)
+            task = service.server_task
+            if task.done():
+                exc = None if task.cancelled() else task.exception()
+                result["error"] = str(exc or getattr(service, "start_error", None)
+                                      or f"could not open port {port} (in use, or needs admin rights)")
+                print(f"[!] {service_type} on port {port} failed: {result['error']}")
+                return result
             self.services[port] = service
+            result["ok"] = True
             print(f"[OK] Started {service_type} on port {port}")
         except ImportError as e:
+            result["error"] = f"failed to load: {e}"
             print(f"[!] Failed to load service {service_type}: {e}")
         except Exception as e:
+            result["error"] = str(e)
             print(f"[!] Error starting service {service_type}: {e}")
+        return result
 
-    async def start_all_services(self):
+    async def start_all_services(self) -> List[Dict[str, Any]]:
         enabled_services = {
             port: config for port, config in self.config['services'].items()
             if config.get('enabled', True)
@@ -106,14 +157,16 @@ class MIMICController:
 
         print(f"[*] Found {len(enabled_services)} service(s) to start")
 
+        results = []
         for port, config in enabled_services.items():
             port_int = int(port)
             if self.security.validate_port(port_int):
-                await self.start_service(port_int, config)
-                await asyncio.sleep(0.1)
+                results.append(await self.start_service(port_int, config))
 
-        self.running = True
-        print("\n[OK] MIMIC Honeypot READY\n")
+        self.running = bool(self.services)
+        self.started_at = datetime.now(timezone.utc) if self.running else None
+        print("\n[OK] MIMIC Honeypot READY\n" if self.running else "\n[!] No service could start\n")
+        return results
 
     async def stop(self):
         print("\n[*] Stopping services...")
@@ -134,4 +187,27 @@ class MIMICController:
 
         self.services.clear()
         self.running = False
+        self.started_at = None
         print("[OK] All services stopped")
+
+    # --- Operator actions --------------------------------------------------
+
+    def block_ip(self, ip: str) -> str:
+        """Show a visitor out: refused by every service from now on, across restarts."""
+        return blocklist.block(ip)
+
+    def status(self) -> Dict[str, Any]:
+        configured = self.config.get('services', {}) or {}
+        return {
+            "running": self.running,
+            "started_at": self.started_at.isoformat().replace("+00:00", "Z") if self.started_at else None,
+            "services": [
+                {
+                    "type": svc.get("type"),
+                    "port": int(port),
+                    "enabled": bool(svc.get("enabled", True)),
+                    "running": int(port) in self.services,
+                }
+                for port, svc in configured.items()
+            ],
+        }
