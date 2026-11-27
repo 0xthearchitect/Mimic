@@ -6,14 +6,14 @@
 - **Tested on:** Windows 10, Windows 11
 - **Python:** 3.11+
 - **Installation:** `pip install -r requirements.txt`
-- **Run:** `python configurator.py`
+- **Run:** `python mimic.py`
 - **Kill:** `.\kill_honeypot.ps1`
 
 ### ✅ Linux
 - **Tested on:** Ubuntu 20.04+, Debian 11+
 - **Python:** 3.11+
 - **Installation:** `pip3 install -r requirements.txt`
-- **Run:** `python3 configurator.py` or `sudo python3 configurator.py` (for privileged ports)
+- **Run:** `python3 mimic.py` or `sudo python3 mimic.py` (for privileged ports)
 - **Kill:** `./kill_honeypot.sh`
 - **Startup script:** `./start_mimic.sh`
 
@@ -48,20 +48,20 @@ These ports work without special privileges:
 Run PowerShell as Administrator:
 ```powershell
 # Right-click PowerShell → Run as Administrator
-python configurator.py
+python mimic.py
 ```
 
 ### Linux
 Use sudo:
 ```bash
-sudo python3 configurator.py
+sudo python3 mimic.py
 ```
 
 Or set capabilities (recommended for production):
 ```bash
 # Allow Python to bind to privileged ports
 sudo setcap 'cap_net_bind_service=+ep' /usr/bin/python3.11
-python3 configurator.py
+python3 mimic.py
 ```
 
 ## Known Platform Differences
@@ -96,7 +96,7 @@ pip3 install pygame
 ### Linux: "Permission denied" on ports 22, 21, 80, 23
 ```bash
 # Run with sudo
-sudo python3 configurator.py
+sudo python3 mimic.py
 
 # Or use setcap (permanent solution)
 sudo setcap 'cap_net_bind_service=+ep' $(which python3)
