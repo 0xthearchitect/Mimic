@@ -1,11 +1,10 @@
 import asyncio
 import random
-import json
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
-from datetime import datetime
-from pathlib import Path
+from typing import Dict, Any
 import logging
+
+from log_system import events
 
 class BaseService(ABC):
     
@@ -20,10 +19,7 @@ class BaseService(ABC):
         self.server = None
         self.server_task = None
         
-        log_dir = Path("logs")
-        log_dir.mkdir(exist_ok=True)
-        service_type = config.get('type', 'generic').lower()
-        self.json_log_path = log_dir / f"{service_type}_honeypot.jsonl"
+        self.service_type = config.get('type', 'generic').lower()
 
         self.response_delay = config.get('response_delay', {'min': 0.1, 'max': 1.0})
         self.error_rate = config.get('error_rate', 0.05)  # 5% error rate
@@ -87,39 +83,24 @@ class BaseService(ABC):
         ]
         return random.choice(errors)
     
+    # --- Event logging (schema: docs/LOG_FORMAT.md) ---------------------
+
+    def log_event(self, event: str, ip: str, **fields):
+        return events.emit(self.service_type, self.port, event, ip, **fields)
+
     def log_connection(self, ip: str):
         self.connections += 1
         self.logger.info(f"New connection from {ip} to {self.name}")
+        self.log_event(events.CONNECTION, ip, connection_number=self.connections)
 
-        log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "event_type": "connection",
-            "service": self.config.get('type', 'generic'),
-            "port": self.port,
-            "source_ip": ip,
-            "connection_number": self.connections
-        }
-        self._write_json_log(log_entry)
-    
-    def log_command(self, ip: str, command: str):
+    def log_command(self, ip: str, command: str, **fields):
         self.logger.debug(f"Command from {ip}: {command}")
-        
-        log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "event_type": "command",
-            "service": self.config.get('type', 'generic'),
-            "port": self.port,
-            "source_ip": ip,
-            "command": command
-        }
-        self._write_json_log(log_entry)
-    
-    def _write_json_log(self, log_entry: Dict):
-        try:
-            with open(self.json_log_path, 'a', encoding='utf-8') as f:
-                f.write(json.dumps(log_entry) + '\n')
-        except Exception as e:
-            self.logger.error(f"Failed to write JSON log: {e}")
-    
+        self.log_event(events.COMMAND, ip, command=command, **fields)
+
+    def log_login(self, ip: str, username: str, password: str, success: bool, **fields):
+        self.logger.info(f"Login {'OK' if success else 'failed'} from {ip}: {username!r}")
+        self.log_event(events.LOGIN_ATTEMPT, ip, username=username, password=password,
+                       success=success, **fields)
+
     def get_fake_response(self, command: str) -> str:
         return f"Response to: {command}"

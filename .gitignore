@@ -19,3 +19,6 @@ ssh_host_key*
 Thumbs.db
 .vscode/
 .idea/
+
+# Local config (written by the visual configurator; may contain passwords)
+config/honeypot.yaml
