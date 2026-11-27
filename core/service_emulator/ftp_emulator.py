@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import hashlib
 
 from core.service_emulator.base_service import BaseService
+from log_system import events
 
 class FTPService(BaseService):
     
@@ -278,8 +279,11 @@ class FTPService(BaseService):
                     continue
                 
                 session['last_command'] = datetime.now()
-                
-                self.log_command(client_ip, command)
+
+                # Credentials are logged as structured login_attempt events
+                # (see process_command), not as raw command text.
+                if command.split()[0].upper() != "PASS":
+                    self.log_command(client_ip, command, username=session.get('username'))
 
                 response = await self.process_command(command, session, client_ip, writer)
 
@@ -312,10 +316,18 @@ class FTPService(BaseService):
         cmd = cmd_parts[0].upper()
         
         if cmd == "USER":
-            return self.handle_user(cmd_parts, session)
-        
+            response = self.handle_user(cmd_parts, session)
+            if response.startswith("230"):  # anonymous: logged in without PASS
+                self.log_login(client_ip, session['username'], None, True, anonymous=True)
+            return response
+
         elif cmd == "PASS":
-            return self.handle_pass(cmd_parts, session, client_ip)
+            response = self.handle_pass(cmd_parts, session, client_ip)
+            if session.get('username'):
+                # Raw text after "PASS " keeps passwords that contain spaces.
+                self.log_login(client_ip, session['username'], command[5:],
+                               response.startswith("230"))
+            return response
         
         elif cmd == "QUIT":
             return "221 Goodbye."
@@ -848,12 +860,14 @@ class FTPService(BaseService):
                     
                     if total_received > self.max_file_size:
                         return "552 Requested file action aborted. Exceeded storage allocation"
-                
-                self.save_upload_metadata(file_path, client_ip, session['username'], total_received)
-                
-                self.logger.info(f"STOR: File uploaded: {filename} ({total_received} bytes)")
-                self.logger.warning(f"STOR: CAPTURED FILE from {client_ip}: {file_path}")
-                
+
+            # Hash only after the file is closed: inside the `with` block the
+            # data may still be buffered, which yielded the hash of an empty file.
+            self.save_upload_metadata(file_path, client_ip, session['username'], total_received)
+
+            self.logger.info(f"STOR: File uploaded: {filename} ({total_received} bytes)")
+            self.logger.warning(f"STOR: CAPTURED FILE from {client_ip}: {file_path}")
+
             return "226 Transfer complete"
                 
         except Exception as e:
@@ -902,6 +916,10 @@ class FTPService(BaseService):
         
         meta_path = file_path.with_suffix('.meta.json')
         meta_path.write_text(json.dumps(metadata, indent=2), encoding='utf-8')
+
+        self.log_event(events.FILE_UPLOAD, client_ip, username=metadata["username"],
+                       filename=metadata["original_filename"], size=size,
+                       sha256=metadata["sha256"], saved_path=metadata["saved_path"])
     
     def calculate_file_hash(self, file_path: Path) -> str:
         try:
