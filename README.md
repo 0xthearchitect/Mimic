@@ -48,6 +48,17 @@
 
 ---
 
+## ⚠️ Before You Deploy
+
+A honeypot exists to be attacked. Treat the machine running MIMIC as hostile ground:
+
+- **Isolate it.** Run MIMIC in a dedicated VM or container, never on a machine with personal data, credentials or access to your internal network.
+- **Don't run as root/Administrator** unless you need ports below 1024 — on Linux prefer `setcap` (see [PLATFORMS.md](PLATFORMS.md)).
+- **Treat captured files as malware.** Everything in `ftp_storage/` was uploaded by attackers. Don't open or execute it on the host.
+- **Logs contain attacker data** (credentials, commands, IPs). They are git-ignored on purpose; don't publish them unredacted.
+
+---
+
 ## Quick Start
 
 ### Prerequisites
