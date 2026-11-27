@@ -30,7 +30,7 @@ export async function render(state) {
   const running = state.status.running;
   // Only reload from the server when not mid-edit, or when the show is running.
   // Live updates must not rebuild the form under the operator's cursor.
-  if (draft && !running && $('#playbill').contains(document.activeElement)) return;
+  if (draft && !running && $('#playbill-form').contains(document.activeElement)) return;
   if (!draft || running) {
     const { config } = await api('/api/config');
     draft = structuredClone(config);
@@ -42,7 +42,7 @@ export async function render(state) {
 function wire() {
   if (wired) return;
   wired = true;
-  const form = $('#playbill');
+  const form = $('#playbill-form');
   const os = form.elements.os_template;
   os.replaceChildren(...Object.keys(WELCOME).map((k) => h('option', { value: k }, k)));
 
@@ -76,7 +76,7 @@ function wire() {
 }
 
 function fill(running) {
-  const form = $('#playbill');
+  const form = $('#playbill-form');
   const sys = draft.system || {}, opt = draft.options || {};
   $('#pb-fields').disabled = running;
   form.elements.hostname.value = sys.hostname || '';
