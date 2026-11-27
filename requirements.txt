@@ -13,3 +13,6 @@ pygame>=2.5.2,<3
 
 # Optional: better passive-mode IP detection for FTP
 # netifaces
+
+# Dashboard: aiohttp serves the web UI on the honeypot event loop (docs/ARCHITECTURE.md)
+aiohttp>=3.11,<4
