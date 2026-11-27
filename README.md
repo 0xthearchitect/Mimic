@@ -150,16 +150,35 @@ chmod +x start_mimic.sh
 6. Monitor live activity
 7. Click **"Close the curtains"** to stop
 
-#### Option 2: Direct Execution
+#### Option 2: Headless (servers, no GUI)
 
 ```bash
-# Edit config/honeypot.yaml first
+# First run creates config/honeypot.yaml from config/honeypot.example.yaml
 python main.py
+
+# Or point to another config file
+python main.py --config path/to/honeypot.yaml
 ```
+
+If the config has a mistake (bad port, unknown service type…), MIMIC lists every problem and exits before opening any port.
+
+#### Option 3: Docker
+
+```bash
+cp config/honeypot.example.yaml config/honeypot.yaml   # then edit it
+docker compose up -d --build
+docker compose logs -f                                 # live activity
+```
+
+The container runs as a non-root user with a read-only filesystem and no extra capabilities. Logs and captured files live in Docker volumes (`docker compose cp mimic:/app/logs ./mimic-logs` to export them). Keep the `ports:` list in `docker-compose.yml` in sync with the services you enable.
+
+> **Note:** FTP passive-mode transfers need the passive port range reachable from outside; under Docker's default bridge network, logins and commands are captured but file transfers may fail.
 
 ---
 
 ## Configuration
+
+`config/honeypot.yaml` is your local config: it is written by the visual configurator and git-ignored (it may contain passwords). `config/honeypot.example.yaml` is the template.
 
 ### Example Configuration
 
@@ -260,10 +279,12 @@ nmap -sV 192.168.1.100
 
 ```
 logs/
-├── ssh_honeypot.jsonl      # SSH session logs
-├── ftp_honeypot.jsonl      # FTP connection logs
-├── http_honeypot.jsonl     # HTTP request logs
-└── honeypot_output.log     # Main system log
+├── ssh_honeypot.jsonl      # One JSON Lines file per service,
+├── ftp_honeypot.jsonl      #   all in the same format
+├── telnet_honeypot.jsonl
+├── http_honeypot.jsonl
+├── mysql_honeypot.jsonl
+└── honeypot_output.log     # Main system log (what the GUI shows)
 ```
 
 ### FTP Storage
@@ -286,19 +307,26 @@ ftp_storage/
 
 ### Log Format (JSON Lines)
 
+Every service uses the same fields, so you can analyse all of them together. Full reference: [docs/LOG_FORMAT.md](docs/LOG_FORMAT.md).
+
 ```json
 {
-  "timestamp": "2025-12-24T17:30:45.123456",
+  "timestamp": "2026-11-27T10:10:50.928Z",
   "event": "login_attempt",
   "service": "ssh",
   "port": 22,
   "client_ip": "192.168.1.50",
   "username": "admin",
   "password": "password123",
-  "success": true,
-  "valid_credentials": false,
-  "any_auth_mode": true
+  "success": true
 }
+```
+
+Events: `connection`, `login_attempt`, `command`, `file_upload` (with SHA-256), `blocked_connection`.
+
+```bash
+# Every login attempt, from every service
+cat logs/*_honeypot.jsonl | jq -c 'select(.event == "login_attempt")'
 ```
 
 ---
@@ -309,35 +337,42 @@ ftp_storage/
 
 ```
 mimic/
-├── main.py                 # Entry point
-├── mimic.py                # Visual GUI
+├── main.py                     # Entry point (headless)
+├── mimic.py                    # Visual configurator
+├── Dockerfile, docker-compose.yml
 ├── config/
-│   ├── honeypot.yaml      # Main configuration
-│   └── templates/         # OS templates (future)
+│   ├── honeypot.example.yaml   # Template (versioned)
+│   ├── honeypot.yaml           # Your config (git-ignored)
+│   └── templates/              # OS templates (future)
 ├── core/
-│   ├── controller.py      # Service orchestration
-│   ├── port_manager.py    # Port validation
-│   ├── security_layer.py  # Security checks
-|   ├── config_manager.py  # Config File Management
+│   ├── controller.py           # Service registry + orchestration
+│   ├── config_schema.py        # Config validation
+│   ├── security_layer.py       # Rate limiting / IP blocking
 │   └── service_emulator/
+│       ├── base_service.py
 │       ├── ssh_emulator.py
 │       ├── ftp_emulator.py
-│       ├── http_emulator.py
 │       └── ...
 ├── log_system/
-│   └── session_logger.py  # Logging framework
-|
-├── ftp_storage/           # FTP service Storage
-|
-└── logs/                  # Generated logs
+│   └── events.py               # Unified JSON Lines event log
+├── docs/LOG_FORMAT.md
+├── tests/
+├── ftp_storage/                # Captured files (git-ignored)
+└── logs/                       # Generated logs (git-ignored)
 ```
 
 ### Adding New Services
 
-1. Create emulator in `core/service_emulator/`
-2. Inherit from `BaseService`
-3. Implement `handle_connection()`
-4. Register in `controller.py`
+1. Create the emulator in `core/service_emulator/`, inheriting from `BaseService`
+2. Implement `handle_connection()`; log with `log_connection`, `log_login`, `log_command`
+3. Register it in `SERVICE_REGISTRY` in `core/controller.py`
+
+### Running the Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests
+```
 
 ---
 

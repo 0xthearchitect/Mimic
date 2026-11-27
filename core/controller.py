@@ -1,107 +1,104 @@
 import asyncio
+import importlib
+import shutil
+from pathlib import Path
+from typing import Any, Dict, NamedTuple
+
 import yaml
-from typing import Dict, Any
-from core.port_manager import PortManager
+
+from core.config_schema import check_config
 from core.security_layer import SecurityLayer
 from log_system.session_logger import SessionLogger
-import sys
+
+
+class ServiceSpec(NamedTuple):
+    module: str
+    cls: str
+    needs_security: bool = False
+
+
+# Service registry: config "type" -> emulator class.
+# To add a service: create it in core/service_emulator/ and register it here.
+SERVICE_REGISTRY: Dict[str, ServiceSpec] = {
+    "ssh": ServiceSpec("core.service_emulator.ssh_emulator", "SSHService", needs_security=True),
+    "ftp": ServiceSpec("core.service_emulator.ftp_emulator", "FTPService"),
+    "http": ServiceSpec("core.service_emulator.http_emulator", "HTTPService"),
+    "mysql": ServiceSpec("core.service_emulator.mysql_emulator", "MySQLService"),
+    "telnet": ServiceSpec("core.service_emulator.telnet_emulator", "TelnetService"),
+}
+
+# Offered by the visual configurator but not implemented yet: skipped with a warning.
+PLANNED_SERVICES = {"rdp"}
+
+EXAMPLE_CONFIG = Path("config/honeypot.example.yaml")
+
 
 class MIMICController:
     def __init__(self, config_path: str = "config/honeypot.yaml"):
         self.config = self.load_config(config_path)
         self.security = SecurityLayer(self.config.get('security', {}))
-        self.port_manager = PortManager()
         self.logger = SessionLogger()
         self.services = {}
-        self.file_capture = None
         self.running = False
-        
+
     def load_config(self, path: str) -> Dict[str, Any]:
-        with open(path, 'r') as f:
-            return yaml.safe_load(f)
-    
-    def start_file_capture(self):
-        pass
-    
+        config_path = Path(path)
+        if not config_path.exists() and EXAMPLE_CONFIG.exists():
+            shutil.copyfile(EXAMPLE_CONFIG, config_path)
+            print(f"[*] No {config_path} found - created it from {EXAMPLE_CONFIG}")
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        return check_config(config, SERVICE_REGISTRY, PLANNED_SERVICES)
+
+    def build_service_config(self, service_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Service config plus the global identity/options every emulator may use."""
+        system = self.config.get('system', {}) or {}
+        options = self.config.get('options', {}) or {}
+        security = self.config.get('security', {}) or {}
+
+        config = dict(service_config)
+        config.update({
+            'hostname': system.get('hostname', 'ubuntu-server'),
+            'username': system.get('username', 'admin'),
+            'password': system.get('password', 'admin123'),
+            'os_template': system.get('os_template', 'Ubuntu'),
+            'any_auth': options.get('any_auth', True),
+            'human_patterns': options.get('human_patterns', True),
+            'brute_force_attempts': options.get('brute_force_attempts', 1),
+            'security_enabled': security.get('enabled', True),
+        })
+        if config.get('type') == 'ssh' and 'enable_scp' in config:
+            config['scp_redirect_port'] = 2222
+            config['sftp_redirect_port'] = 2223
+        return config
+
+    def create_service(self, port: int, service_config: Dict[str, Any]):
+        service_type = service_config.get('type', '')
+        spec = SERVICE_REGISTRY[service_type]
+        service_cls = getattr(importlib.import_module(spec.module), spec.cls)
+        config = self.build_service_config(service_config)
+        if spec.needs_security:
+            return service_cls(port, config, self.security)
+        return service_cls(port, config)
+
     async def start_service(self, port: int, service_config: Dict):
         service_type = service_config.get('type', 'generic')
-        service = None
-        
-        enriched_config = service_config.copy()
-        enriched_config.update({
-            'hostname': self.config.get('system', {}).get('hostname', 'ubuntu-server'),
-            'username': self.config.get('system', {}).get('username', 'admin'),
-            'password': self.config.get('system', {}).get('password', 'admin123'),
-            'os_template': self.config.get('system', {}).get('os_template', 'Ubuntu'),
-            'any_auth': self.config.get('options', {}).get('any_auth', True),
-            'human_patterns': self.config.get('options', {}).get('human_patterns', True),
-            'security_enabled': self.config.get('security', {}).get('enabled', True)
-        })
+
+        if service_type in PLANNED_SERVICES:
+            print(f"[!] {service_type} on port {port} is not implemented yet - skipped")
+            return
 
         try:
-            if service_type == 'ssh':
-                from core.service_emulator.ssh_emulator import SSHService
-                if 'enable_scp' in enriched_config:
-                    enriched_config['scp_redirect_port'] = 2222
-                    enriched_config['sftp_redirect_port'] = 2223
-                
-                enriched_config['any_auth'] = self.config.get('options', {}).get('any_auth', True)
-                enriched_config['brute_force_attempts'] = self.config.get('options', {}).get('brute_force_attempts', 1)
-                
-                service = SSHService(port, enriched_config, self.security)
-            elif service_type == 'http':
-                from core.service_emulator.http_emulator import HTTPService
-                service = HTTPService(port, service_config)
-            elif service_type == 'http_upload':
-                from core.service_emulator.http_upload import HTTPUploadService
-                service = HTTPUploadService(port, service_config)
-            elif service_type == 'ftp':
-                from core.service_emulator.ftp_emulator import FTPService
-                enriched_config.update({
-                    'hostname': self.config.get('system', {}).get('hostname', 'ubuntu-server'),
-                    'os_template': self.config.get('system', {}).get('os_template', 'Ubuntu'),
-                    'any_auth': self.config.get('options', {}).get('any_auth', True),
-                    'human_patterns': self.config.get('options', {}).get('human_patterns', True),
-                    'brute_force_attempts': self.config.get('options', {}).get('brute_force_attempts', 1)
-                })
-                
-                if 'username' not in enriched_config:
-                    enriched_config['username'] = self.config.get('system', {}).get('username', 'admin')
-                if 'password' not in enriched_config:
-                    enriched_config['password'] = self.config.get('system', {}).get('password', 'admin123')
-                
-                service = FTPService(port, enriched_config)
-            elif service_type == 'mysql':
-                from core.service_emulator.mysql_emulator import MySQLService
-                service = MySQLService(port, service_config)
-            elif service_type == 'telnet':
-                from core.service_emulator.telnet_emulator import TelnetService
-                service = TelnetService(port, service_config)
-            else:
-                print(f"[!] Unknown service type: {service_type}")
-                return
-                
-            if service:
-                task = asyncio.create_task(service.start())
-                service.server_task = task
-                self.services[port] = service
-                print(f"[OK] Started {service_type} on port {port}")
-            else:
-                print(f"[!] Failed to create service {service_type}")
-                
+            service = self.create_service(port, service_config)
+            service.server_task = asyncio.create_task(service.start())
+            self.services[port] = service
+            print(f"[OK] Started {service_type} on port {port}")
         except ImportError as e:
             print(f"[!] Failed to load service {service_type}: {e}")
         except Exception as e:
             print(f"[!] Error starting service {service_type}: {e}")
-    
-    async def start_all_services(self):
-        self.start_file_capture()
-        await asyncio.sleep(0.5)
-        
-        if 'services' not in self.config:
-            print("[!] No services configured")
-            return
 
+    async def start_all_services(self):
         enabled_services = {
             port: config for port, config in self.config['services'].items()
             if config.get('enabled', True)
@@ -117,24 +114,24 @@ class MIMICController:
 
         self.running = True
         print("\n[OK] MIMIC Honeypot READY\n")
-    
+
     async def stop(self):
         print("\n[*] Stopping services...")
-        
+
         for port, service in self.services.items():
             if service.server_task and not service.server_task.done():
                 service.server_task.cancel()
-                
+
         await asyncio.sleep(0.2)
-        
+
         stop_tasks = []
         for port, service in self.services.items():
             if hasattr(service, 'stop'):
                 stop_tasks.append(service.stop())
-                
+
         if stop_tasks:
             await asyncio.gather(*stop_tasks, return_exceptions=True)
-            
+
         self.services.clear()
         self.running = False
         print("[OK] All services stopped")
