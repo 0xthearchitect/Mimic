@@ -1,9 +1,10 @@
 import asyncio
 import random
 import os
+import re
 import socket
 import string
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from pathlib import Path
 import logging
 from datetime import datetime, timedelta
@@ -57,8 +58,73 @@ class FTPService(BaseService):
         self.logger.info(f"Allow download: {self.allow_download}")
         self.logger.info(f"Configured users: {list(self.users.keys())}")
     
+    # ------------------------------------------------------------------
+    # Path safety
+    #
+    # Every path a client sends is a *virtual* path. It must always map to a
+    # real path inside ftp_storage; anything that would land outside it
+    # (../, drive letters, absolute host paths, NTFS streams, symlinks)
+    # is refused. The honeypot is attacked by design, so this is the
+    # boundary that protects the host.
+    # ------------------------------------------------------------------
+
+    _UNSAFE_NAME = re.compile(r'[^A-Za-z0-9._-]')
+
+    def _safe_name(self, name: str) -> str:
+        """Turn an attacker-chosen username into one safe directory name.
+
+        The original username is still logged as-is; only its use on disk
+        is cleaned.
+        """
+        cleaned = self._UNSAFE_NAME.sub('_', name or '').strip('.')[:64]
+        return cleaned or 'user'
+
+    def _to_virtual(self, session: dict, arg: str = '') -> str:
+        """Resolve a client argument against the session's cwd into a clean
+        absolute POSIX virtual path such as '/pub/incoming/file.txt'."""
+        base = str(session.get('current_dir', '/')).replace('\\', '/')
+        arg = (arg or '').replace('\\', '/')
+        full = arg if arg.startswith('/') else f"{base}/{arg}"
+
+        parts: List[str] = []
+        for part in full.split('/'):
+            if part in ('', '.'):
+                continue
+            if part == '..':
+                if parts:
+                    parts.pop()
+            else:
+                parts.append(part)
+        return '/' + '/'.join(parts)
+
+    def _is_inside(self, real: Path) -> bool:
+        root = self.virtual_root.resolve()
+        try:
+            real = real.resolve()
+        except (OSError, RuntimeError):
+            return False
+        return real == root or root in real.parents
+
+    def _to_real(self, vpath: str) -> Optional[Path]:
+        """Map a virtual path to a real path inside ftp_storage, or None."""
+        parts = [p for p in vpath.split('/') if p]
+        # ':' covers drive letters (C:) and NTFS alternate data streams.
+        if any(':' in p or '\x00' in p for p in parts):
+            return None
+        real = self.virtual_root.joinpath(*parts)
+        return real if self._is_inside(real) else None
+
+    def _incoming_path(self, session: dict, name: str) -> Optional[Path]:
+        """Real path for a destructive op (DELE/RMD/RNTO): only allowed
+        strictly inside /pub/incoming."""
+        vpath = self._to_virtual(session, name)
+        if not vpath.startswith('/pub/incoming/'):
+            return None
+        return self._to_real(vpath)
+
     def ensure_user_directory(self, username: str) -> Path:
-        
+        username = self._safe_name(username)
+
         home_dir = self.virtual_root / "home"
         home_dir.mkdir(exist_ok=True, parents=True)
         
@@ -393,8 +459,8 @@ class FTPService(BaseService):
                 self.ensure_user_directory('anonymous')
             else:
                 self.ensure_user_directory(username)
-                session['current_dir'] = Path(f'/home/{username}')
-            
+                session['current_dir'] = Path(f'/home/{self._safe_name(username)}')
+
             if username not in self.users:
                 self.users[username] = 'any'
             
@@ -416,67 +482,46 @@ class FTPService(BaseService):
         
         self.logger.info(f"CWD command: '{target_dir}' from {session.get('username', 'unknown')}")
 
-        target_dir = target_dir.replace('\\', '/')
-        
-        if target_dir.startswith('/'):
-            new_path = Path(target_dir)
-        else:
-            current_str = str(session['current_dir']).replace('\\', '/')
-            new_path = Path(current_str) / target_dir
-        
         try:
-            path_str = str(new_path).replace('\\', '/')
-            
-            import re
-            path_str = re.sub(r'/+', '/', path_str)
-            
-            parts = []
-            for part in path_str.split('/'):
-                if not part or part == '.':
-                    continue
-                elif part == '..':
-                    if parts:
-                        parts.pop()
-                else:
-                    parts.append(part)
-            
-            normalized_path = '/' + '/'.join(parts) if parts else '/'
-            
-            self.logger.info(f"CWD: Normalized path: {normalized_path}")
-            
-            new_path = Path(normalized_path)
-            
-            path_str = normalized_path
-            
+            path_str = self._to_virtual(session, target_dir)
+            self.logger.info(f"CWD: Normalized path: {path_str}")
+
             if path_str.startswith('/home/'):
                 path_parts = path_str.split('/')
                 if len(path_parts) >= 3:
                     username = path_parts[2]
-                    
+
                     valid_users = list(self.users.keys())
                     if self.any_auth:
                         valid_users.append(username)
-                    
+
                     if username in valid_users or self.any_auth:
                         self.logger.info(f"CWD: User directory for: {username}")
-                        
-                        virtual_path = self.ensure_user_directory(username)
-                        
+
+                        self.ensure_user_directory(username)
+                        path_parts[2] = self._safe_name(username)
+                        path_str = '/'.join(path_parts)
+
+                        virtual_path = self._to_real(path_str)
+                        if virtual_path is None:
+                            return '550 Failed to change directory.'
                         if len(path_parts) > 3:
-                            subdirs = '/'.join(path_parts[3:])
-                            virtual_path = virtual_path / subdirs
                             virtual_path.mkdir(exist_ok=True, parents=True)
-                        
-                        session['current_dir'] = new_path
+
+                        session['current_dir'] = Path(path_str)
                         return '250 Directory successfully changed.'
-            
+
+            new_path = Path(path_str)
             relative_path = path_str.lstrip('/')
-            virtual_path = self.virtual_root / relative_path.replace('/', os.sep)
-            
+            virtual_path = self._to_real(path_str)
+            if virtual_path is None:
+                self.logger.warning(f"CWD: Blocked path outside storage: {target_dir!r}")
+                return '550 Failed to change directory. Directory does not exist.'
+
             allowed_prefixes = ['pub/', 'tmp/', 'var/', 'etc/', 'usr/', 'opt/']
             if any(relative_path.startswith(prefix) for prefix in allowed_prefixes):
                 virtual_path.mkdir(exist_ok=True, parents=True)
-            
+
             if virtual_path.exists() and virtual_path.is_dir():
                 session['current_dir'] = new_path
                 return '250 Directory successfully changed.'
@@ -491,10 +536,10 @@ class FTPService(BaseService):
             return '550 Failed to change directory.'
     
     def handle_cdup(self, session: dict) -> str:
-        if str(session['current_dir']) == '/':
+        if self._to_virtual(session) == '/':
             return '250 Directory already at root.'
-        
-        session['current_dir'] = session['current_dir'].parent
+
+        session['current_dir'] = Path(self._to_virtual(session, '..'))
         return '250 Directory successfully changed.'
     
     def handle_type(self, cmd_parts: List[str], session: dict) -> str:
@@ -633,20 +678,14 @@ class FTPService(BaseService):
             return "501 Syntax error in parameters"
     
     async def handle_list(self, cmd_parts: List[str], session: dict, client_ip: str, control_writer) -> str:
-        target_dir = session['current_dir']
-        if len(cmd_parts) > 1:
-            dir_arg = cmd_parts[1]
-            if dir_arg.startswith('/'):
-                target_dir = Path(dir_arg)
-            else:
-                target_dir = target_dir / dir_arg
-        
-        target_str = str(target_dir).replace('\\', '/').lstrip('/')
-        virtual_path = self.virtual_root / target_str.replace('/', os.sep)
-        
-        self.logger.info(f"LIST: target_dir={target_dir}, virtual_path={virtual_path}, exists={virtual_path.exists()}")
-        
-        if not virtual_path.exists() or not virtual_path.is_dir():
+        dir_arg = cmd_parts[1] if len(cmd_parts) > 1 else ''
+        # Clients often send flags such as "LIST -la"; treat those as cwd.
+        if dir_arg.startswith('-'):
+            dir_arg = ''
+        target_dir = self._to_virtual(session, dir_arg)
+        virtual_path = self._to_real(target_dir)
+
+        if virtual_path is None or not virtual_path.exists() or not virtual_path.is_dir():
             self.logger.warning(f"LIST: Directory not found: {virtual_path}")
             return "550 Directory not found"
         
@@ -677,17 +716,13 @@ class FTPService(BaseService):
             return "501 Missing filename"
         
         filename = cmd_parts[1]
-        
-        if filename.startswith('/'):
-            file_path = Path(filename)
-        else:
-            file_path = session['current_dir'] / filename
-        
-        virtual_path = self.virtual_root / str(file_path).lstrip('/')
-        
-        if not virtual_path.exists() or not virtual_path.is_file():
+        virtual_path = self._to_real(self._to_virtual(session, filename))
+
+        if virtual_path is None or not virtual_path.exists() or not virtual_path.is_file():
+            if virtual_path is None:
+                self.logger.warning(f"RETR: Blocked path outside storage from {client_ip}: {filename!r}")
             return "550 File not found"
-        
+
         file_size = virtual_path.stat().st_size
         if file_size > self.max_file_size:
             return "552 Requested file action aborted. Exceeded storage allocation"
@@ -742,15 +777,14 @@ class FTPService(BaseService):
         upload_dir = None
         
         try:
-            current_dir = session.get('current_dir', Path('/'))
-            current_str = str(current_dir).replace('\\', '/')
-            
+            current_str = self._to_virtual(session)
+
             self.logger.info(f"STOR: Current directory string: {current_str}")
-            
+
             if current_str == '/':
                 username = session.get('username', 'anonymous')
                 if username and username.lower() != 'anonymous':
-                    upload_dir = self.virtual_root / "home" / username
+                    upload_dir = self.virtual_root / "home" / self._safe_name(username)
                 else:
                     upload_dir = self.virtual_root / "pub" / "incoming"
             elif current_str.startswith('/home/'):
@@ -774,8 +808,12 @@ class FTPService(BaseService):
                 if username.lower() == 'anonymous':
                     upload_dir = self.virtual_root / "pub" / "incoming"
                 else:
-                    upload_dir = self.virtual_root / "home" / username
-            
+                    upload_dir = self.virtual_root / "home" / self._safe_name(username)
+
+            if not self._is_inside(upload_dir) or any(':' in p for p in upload_dir.parts[1:]):
+                self.logger.warning(f"STOR: Blocked upload outside storage from {client_ip}: {upload_dir}")
+                return "553 Requested action not taken. Permission denied"
+
             upload_dir.mkdir(exist_ok=True, parents=True)
             
             self.logger.info(f"STOR: Upload directory: {upload_dir}")
@@ -1021,9 +1059,9 @@ class FTPService(BaseService):
             return "501 Missing filename"
         
         filename = cmd_parts[1]
-        
-        if "pub/incoming" in str(session['current_dir']):
-            file_path = self.virtual_root / "pub" / "incoming" / filename
+
+        file_path = self._incoming_path(session, filename)
+        if file_path is not None:
             if file_path.exists() and file_path.is_file():
                 try:
                     file_path.unlink()
@@ -1041,14 +1079,10 @@ class FTPService(BaseService):
             return "501 Missing directory name"
         
         dirname = cmd_parts[1]
-        
-        if dirname.startswith('/'):
-            dir_path = Path(dirname)
-        else:
-            dir_path = session['current_dir'] / dirname
-        
-        virtual_path = self.virtual_root / str(dir_path).lstrip('/')
-        
+
+        dir_str = self._to_virtual(session, dirname).lstrip('/')
+        virtual_path = self._to_real(dir_str)
+
         allowed_prefixes = [
             'pub/incoming',
             'Users',
@@ -1056,10 +1090,11 @@ class FTPService(BaseService):
             'backup',
             'data'
         ]
-        
-        dir_str = str(dir_path).lstrip('/')
-        is_allowed = any(dir_str.startswith(prefix) for prefix in allowed_prefixes)
-        
+
+        is_allowed = virtual_path is not None and any(
+            dir_str == prefix or dir_str.startswith(prefix + '/') for prefix in allowed_prefixes
+        )
+
         if is_allowed:
             try:
                 virtual_path.mkdir(exist_ok=True, parents=True)
@@ -1075,9 +1110,9 @@ class FTPService(BaseService):
             return "501 Missing directory name"
         
         dirname = cmd_parts[1]
-        
-        if "pub/incoming" in str(session['current_dir']):
-            dir_path = self.virtual_root / "pub" / "incoming" / dirname
+
+        dir_path = self._incoming_path(session, dirname)
+        if dir_path is not None:
             if dir_path.exists() and dir_path.is_dir():
                 try:
                     if any(dir_path.iterdir()):
@@ -1107,10 +1142,9 @@ class FTPService(BaseService):
         old_name = session['rename_from']
         new_name = cmd_parts[1]
         
-        if "pub/incoming" in str(session['current_dir']):
-            old_path = self.virtual_root / "pub" / "incoming" / old_name
-            new_path = self.virtual_root / "pub" / "incoming" / new_name
-            
+        old_path = self._incoming_path(session, old_name)
+        new_path = self._incoming_path(session, new_name)
+        if old_path is not None and new_path is not None:
             if old_path.exists():
                 try:
                     old_path.rename(new_path)
@@ -1132,15 +1166,9 @@ class FTPService(BaseService):
             return "501 Missing filename"
         
         filename = cmd_parts[1]
-        
-        if filename.startswith('/'):
-            file_path = Path(filename)
-        else:
-            file_path = session['current_dir'] / filename
-        
-        virtual_path = self.virtual_root / str(file_path).lstrip('/')
-        
-        if virtual_path.exists() and virtual_path.is_file():
+        virtual_path = self._to_real(self._to_virtual(session, filename))
+
+        if virtual_path is not None and virtual_path.exists() and virtual_path.is_file():
             size = virtual_path.stat().st_size
             return f"213 {size}"
         else:
@@ -1151,15 +1179,9 @@ class FTPService(BaseService):
             return "501 Missing filename"
         
         filename = cmd_parts[1]
-        
-        if filename.startswith('/'):
-            file_path = Path(filename)
-        else:
-            file_path = session['current_dir'] / filename
-        
-        virtual_path = self.virtual_root / str(file_path).lstrip('/')
-        
-        if virtual_path.exists():
+        virtual_path = self._to_real(self._to_virtual(session, filename))
+
+        if virtual_path is not None and virtual_path.exists():
             import time
             mtime = virtual_path.stat().st_mtime
             # Formato: YYYYMMDDHHMMSS
