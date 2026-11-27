@@ -84,11 +84,14 @@ a.ticket:hover { color: var(--ground); filter: brightness(1.08); }
 .tickets { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
 .stage-grid { display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start; margin-top: 56px; }
 .script { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.scene { padding: 28px 16px 32px; border-bottom: 1px solid var(--line); border-radius: 4px; transition: background .3s; }
-.scene.spot { background: radial-gradient(ellipse 60% 90% at 50% 0%, rgba(81,200,151,.08), transparent 70%); }
-.scene .slug { margin: 0 0 18px; font: 13px var(--mono); letter-spacing: .08em; color: var(--muted); }
-.scene .slug .spotlight { margin-left: 12px; color: var(--in); }
-.scene .body { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 6px; text-align: center; }
+.scene { padding: 22px 20px 26px; border-bottom: 1px solid var(--line); border-radius: 4px; transition: background .3s; }
+/* mint bar = the visitor whose ticket is open (the rule is written in the script bar) */
+.scene.spot { box-shadow: inset 3px 0 0 var(--in); background: linear-gradient(90deg, rgba(81,200,151,.07), transparent 60%); }
+.scene .slug { margin: 0 0 12px; font: 12px var(--mono); letter-spacing: .08em; color: var(--muted); }
+.scene .body { display: flex; flex-direction: column; gap: 10px; }
+.scene .cue { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.scene .lines { display: flex; flex-direction: column; gap: 4px; padding-left: 16px; border-left: 1px solid var(--line); }
+.scene .line.routine { color: var(--dim); font-size: 13px; }
 .scene .who { font: 500 15px var(--mono); letter-spacing: .06em; }
 .scene .who button { all: unset; cursor: pointer; border-bottom: 1px dashed var(--line-2); }
 .scene .who button:hover { color: var(--in); }
@@ -97,6 +100,16 @@ a.ticket:hover { color: var(--ground); filter: brightness(1.08); }
 .scene .line { font: 15px var(--mono); overflow-wrap: anywhere; }
 .scene .line.ok { color: var(--in); } .scene .line.no { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--out); }
 .scene .line.upload { color: var(--out); }
+.script-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 4px 0 8px; }
+.segs { display: inline-flex; border: 1px solid var(--line-2); border-radius: 999px; padding: 3px; }
+.seg { all: unset; cursor: pointer; padding: 6px 14px; border-radius: 999px; font: 13px var(--mono); color: var(--muted); }
+.seg:hover { color: var(--text); }
+.seg[aria-pressed="true"] { background: var(--text); color: var(--ground); }
+.seg:focus-visible { outline: 2px solid var(--in); outline-offset: 2px; }
+.script-bar .keys { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.script-bar .key { font: 13px var(--mono); color: var(--muted); }
+.script-bar .routine-sample { font-weight: 400; color: var(--dim); }
+.script-bar .key i { display: inline-block; width: 3px; height: 14px; margin-right: 8px; vertical-align: -2px; background: var(--in); }
 .empty { padding: 48px 16px; text-align: center; color: var(--muted); font: italic 24px var(--serif); }
 
 .house { flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
@@ -106,9 +119,9 @@ a.ticket:hover { color: var(--ground); filter: brightness(1.08); }
 .stage-lip { width: 78%; height: 34px; margin-bottom: 6px; border-radius: 0 0 50% 50% / 0 0 100% 100%; background: #1E1C23;
   box-shadow: 0 10px 40px rgba(255,236,214,.10); display: grid; place-items: center; font: 11px var(--mono); letter-spacing: .3em; color: var(--muted); }
 .zone { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 0 10px; border-top: 1px dashed var(--line); }
-.zone-head { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 0 8px; }
+.zone-head { width: 100%; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; padding: 0 8px; }
 .zone-head .t { flex: none; font: 11px var(--mono); letter-spacing: .2em; }
-.zone-head .d { font-size: 13px; color: var(--muted); text-align: right; }
+.zone-head .d { font-size: 13px; color: var(--muted); }
 .row { display: flex; align-items: center; gap: 6px; }
 .row .n { width: 16px; font: 11px var(--mono); color: var(--dim); }
 .seat { width: 18px; height: 16px; border-radius: 6px 6px 3px 3px; border: 1px solid var(--line); padding: 0; background: transparent; }
@@ -117,7 +130,7 @@ button.seat.in { background: var(--in); } button.seat.out { background: var(--ou
 button.seat.banned { opacity: .35; }
 button.seat[aria-pressed="true"] { outline: 2px solid var(--text); outline-offset: 2px; box-shadow: 0 0 18px currentColor; }
 .standing { font: 12px var(--mono); color: var(--muted); }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
 .legend i { display: inline-block; width: 12px; height: 10px; border-radius: 4px 4px 2px 2px; margin-right: 6px; vertical-align: middle; }
 
 /* seat ticket: notches sit above and below the perforation */
@@ -129,6 +142,8 @@ button.seat[aria-pressed="true"] { outline: 2px solid var(--text); outline-offse
 .seat-ticket .head span { white-space: nowrap; }
 .seat-ticket .ip { font: 500 22px var(--mono); overflow-wrap: anywhere; }
 .seat-ticket .story { font: italic 20px/1.3 var(--serif); }
+.seat-ticket .visits { font-size: 13px; color: #55505C; }
+.seat-ticket .doors { display: flex; flex-direction: column; letter-spacing: .1em; margin-bottom: 6px; }
 .seat-ticket .stub { flex: none; width: 92px; border-left: 2px dashed #B9B4C0; padding: 16px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; font: 12px var(--mono); }
 .seat-ticket .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .btn { min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--ground); background: transparent; color: var(--ground); font: 14px var(--sans); }
