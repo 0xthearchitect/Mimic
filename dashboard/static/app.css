@@ -1,4 +1,6 @@
 /* MIMIC dashboard — v3 "theatre" direction.
+   Palette = the colours of the hand-drawn mask (assets/brand/BRAND.md);
+   pink lifted 3 % in lightness so text passes WCAG AA (4.5:1).
    Colour carries meaning everywhere: mint = got in, pink = refused / danger,
    grey = only knocked. Nothing else uses those two accents. */
 
@@ -11,7 +13,7 @@
 :root {
   --ground: #0C0B0E; --surface: #16151A; --pit: #121116; --line: #2A2830; --line-2: #3A3742;
   --text: #EDEBE6; --muted: #A8A3B0; --dim: #8C8794;
-  --in: #4FF0C2; --out: #FF4F9A; --knock: #8C8794; --bulb: #FFE9B0; --plum: #3A1428;
+  --in: #51C897; --out: #CC5392; --knock: #8C8794; --bulb: #FFE9B0; --plum: #3A1428;
   --serif: "Instrument Serif", Georgia, serif; --sans: "IBM Plex Sans", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
 }
@@ -20,6 +22,8 @@ html, body { margin: 0; background: var(--ground); color: var(--text); font: 16p
 a { color: var(--text); } a:hover { color: var(--in); }
 button { font: inherit; color: inherit; cursor: pointer; }
 :focus-visible { outline: 2px solid var(--in); outline-offset: 3px; }
+/* `hidden` must win over any display rule (e.g. .pill.go is inline-grid). */
+[hidden] { display: none !important; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .mono { font-family: var(--mono); } .serif { font-family: var(--serif); } .muted { color: var(--muted); }
 .label { font-family: var(--mono); font-size: 13px; letter-spacing: .4em; color: var(--muted); text-transform: uppercase; font-weight: 400; margin: 0; }
@@ -40,14 +44,15 @@ body.closed .curtain { width: 120px; }
 
 header .bar { max-width: 1200px; margin: 0 auto; padding: 20px 32px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px 36px; }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
-.brand img { width: 42px; height: 42px; object-fit: contain; }
-.brand span { font: 32px/1 var(--serif); }
+.brand .mask { width: 36px; height: 42px; object-fit: contain; }
+/* wordmark: Instrument Serif Italic outlines; its second i-dot carries the mask's glitch */
+.brand .word { height: 40px; width: auto; }
 /* The mask flickers only while the honeypot is live: it is the "on air" light. */
-body.open .brand img { animation: glitch 4s steps(1) infinite; }
+body.open .brand .mask { animation: glitch 4s steps(1) infinite; }
 @keyframes glitch { 0%,92%,100% { filter: none; transform: none; }
   93% { filter: drop-shadow(-3px 0 var(--out)) drop-shadow(3px 0 var(--in)); transform: translateX(1px); }
   95% { filter: drop-shadow(3px 0 var(--out)) drop-shadow(-3px 0 var(--in)); transform: translateX(-1px); } }
-@media (prefers-reduced-motion: reduce) { body.open .brand img { animation: none; } .curtain { transition: none; } }
+@media (prefers-reduced-motion: reduce) { body.open .brand .mask { animation: none; } .curtain { transition: none; } }
 nav.main { display: flex; gap: 26px; flex-wrap: wrap; font: 22px var(--serif); }
 nav.main a { padding: 6px 0; color: var(--muted); text-decoration: none; }
 nav.main a[aria-current="page"] { color: var(--text); font-style: italic; border-bottom: 1px solid var(--in); }
@@ -80,7 +85,7 @@ a.ticket:hover { color: var(--ground); filter: brightness(1.08); }
 .stage-grid { display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start; margin-top: 56px; }
 .script { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .scene { padding: 28px 16px 32px; border-bottom: 1px solid var(--line); border-radius: 4px; transition: background .3s; }
-.scene.spot { background: radial-gradient(ellipse 60% 90% at 50% 0%, rgba(79,240,194,.08), transparent 70%); }
+.scene.spot { background: radial-gradient(ellipse 60% 90% at 50% 0%, rgba(81,200,151,.08), transparent 70%); }
 .scene .slug { margin: 0 0 18px; font: 13px var(--mono); letter-spacing: .08em; color: var(--muted); }
 .scene .slug .spotlight { margin-left: 12px; color: var(--in); }
 .scene .body { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 6px; text-align: center; }
@@ -147,7 +152,7 @@ button.seat[aria-pressed="true"] { outline: 2px solid var(--text); outline-offse
 .starring { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 8px 14px; font: 34px var(--serif); }
 .modes { width: 100%; max-width: 620px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .mode { text-align: left; padding: 18px 20px; border-radius: 14px; border: 1px solid var(--line-2); background: transparent; display: flex; flex-direction: column; gap: 6px; }
-.mode[aria-checked="true"] { border-color: var(--in); background: rgba(79,240,194,.06); }
+.mode[aria-checked="true"] { border-color: var(--in); background: rgba(81,200,151,.06); }
 .mode .t { font: italic 26px/1.1 var(--serif); } .mode .x { font-size: 14px; color: var(--muted); }
 .cast { width: 100%; max-width: 620px; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; text-align: left; }
 .cast li { display: flex; align-items: center; gap: 12px; min-height: 52px; }
@@ -158,7 +163,7 @@ button.seat[aria-pressed="true"] { outline: 2px solid var(--text); outline-offse
 .cast .port { flex: none; width: 76px; font: 15px var(--mono); }
 .switch { flex: none; width: 52px; height: 30px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); position: relative; padding: 0; }
 .switch::after { content: ""; position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--dim); transition: left .2s; }
-.switch[aria-checked="true"] { background: rgba(79,240,194,.18); border-color: var(--in); }
+.switch[aria-checked="true"] { background: rgba(81,200,151,.18); border-color: var(--in); }
 .switch[aria-checked="true"]::after { left: 26px; background: var(--in); }
 .backstage { align-self: stretch; text-align: left; color: var(--muted); }
 .backstage summary { font: italic 20px var(--serif); color: var(--text); cursor: pointer; }
@@ -197,7 +202,7 @@ button.seat[aria-pressed="true"] { outline: 2px solid var(--text); outline-offse
 .claim-card dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; }
 .claim-card dt { font: 11px var(--mono); letter-spacing: .16em; color: var(--muted); padding-top: 3px; }
 .claim-card dd { margin: 0; font: 14px var(--mono); overflow-wrap: anywhere; }
-.claim-card .warn { margin: 0; padding: 12px 14px; border-radius: 8px; background: rgba(255,79,154,.08); color: var(--out); font-size: 14px; }
+.claim-card .warn { margin: 0; padding: 12px 14px; border-radius: 8px; background: rgba(204,83,146,.08); color: var(--out); font-size: 14px; }
 .claim-card .actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .claim-card .btn { border-color: var(--line-2); color: var(--text); }
 .letterboard { margin-top: 56px; padding: 28px; border-radius: 12px; background: #141017; border: 1px solid var(--line-2); position: relative; }

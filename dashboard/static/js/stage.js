@@ -8,11 +8,12 @@ const ZONE_TEXT = {
   refused: { color: 'var(--dim)', desc: 'row D: tried to log in, always refused' },
   knocked: { color: 'var(--dim)', desc: 'row E: only knocked, never tried a password' },
 };
+// '$' marks a real shell command (SSH); '›' a protocol command (FTP, HTTP, MySQL).
 const STATUS_WORD = { in: 'got in', out: 'refused', knock: 'only knocked' };
 
 let picked = null;   // ip of the selected seat
 
-export async function render() {
+export async function render(state) {
   const data = await api('/api/stage');
   const { house, script, headline, blocked } = data;
   const banned = new Set(blocked);
@@ -20,9 +21,10 @@ export async function render() {
   $('#n-visitors').textContent = num(headline.visitors);
   $('#n-tries').textContent = num(headline.tries);
   $('#n-files').textContent = num(headline.files);
-  $('#headline').textContent = headline.visitors
-    ? 'The audience is watching.'
-    : 'An empty house, for now.';
+  // The headline states the facts: is the show on, and is anyone there?
+  $('#headline').textContent = !state.status.running
+    ? 'Between shows.'
+    : headline.visitors ? 'The audience is watching.' : 'An empty house, for now.';
 
   if (!picked || !house.visitors[picked]) {
     // Default spotlight: the visitor who got deepest, most recently.
@@ -60,7 +62,7 @@ function renderScript(scenes, house) {
         h('span', { class: `dir ${tone}` }, `(${sc.direction})`),
         sc.lines.map((ln) => h('span', {
           class: 'line' + (ln.kind === 'login' ? (ln.ok ? ' ok' : ' no') : '') + (ln.kind === 'upload' ? ' upload' : ''),
-        }, ln.kind === 'command' ? `$ ${ln.text}` : ln.kind === 'upload' ? `⇪ ${ln.text}` : ln.text))));
+        }, ln.kind === 'command' ? `${sc.service === 'ssh' ? '$' : '›'} ${ln.text}` : ln.kind === 'upload' ? `⇪ ${ln.text}` : ln.text))));
   }));
 }
 

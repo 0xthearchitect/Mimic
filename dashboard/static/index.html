@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <title>Mimic</title>
-<link rel="icon" href="/static/mask.png">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/app.css">
 <script type="module" src="/static/js/app.js"></script>
 </head>
@@ -16,7 +16,7 @@
   <div class="frame-body">
     <header>
       <div class="bar">
-        <a class="brand" href="#stage"><img src="/static/mask.png" alt=""><span>Mimic</span></a>
+        <a class="brand" href="#stage"><img class="mask" src="/static/mask.svg" alt=""><img class="word" src="/static/wordmark.svg" alt="Mimic"></a>
         <nav class="main" aria-label="Main">
           <a href="#stage" data-view="stage">The Stage</a>
           <a href="#playbill" data-view="playbill">Playbill</a>
@@ -60,7 +60,7 @@
     <main id="view-playbill" hidden>
       <div class="playbill-grid">
         <article class="programme">
-          <form id="playbill" novalidate>
+          <form id="playbill-form" novalidate>
             <fieldset id="pb-fields">
               <legend class="sr">Honeypot configuration</legend>
               <div style="display:flex;flex-direction:column;align-items:center;gap:10px;width:100%">

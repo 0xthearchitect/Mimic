@@ -1,6 +1,5 @@
-<div align="center" valign="middle">
-  <img src="assets/mimic_logo_animation.gif" width="10%" />
-  <br><br>
+<div align="center">
+  <img src="assets/mimic_banner.png" alt="Mimic: every port is a mask" width="100%" />
   <h1>MIMIC Honeypot Framework (BETA)</h1>
 </div>
 
@@ -17,7 +16,7 @@
 </div>
 
 <p align="center">
-  <img src="/assets/mimic_banner.png" alt="banner"/>
+  <img src="assets/mimic_logo_animation.gif" width="96" alt="The hand-drawn Mimic mask, glitching" />
 </p>
 
 ---
@@ -376,6 +375,8 @@ mimic/
 ├── log_system/
 │   └── events.py               # Unified JSON Lines event log
 ├── docs/LOG_FORMAT.md, docs/ARCHITECTURE.md
+├── assets/brand/               # Logo kit + BRAND.md (rules and reasons)
+├── tools/brand/                # Scripts that regenerate the logo kit
 ├── tests/
 ├── ftp_storage/                # Captured files (git-ignored)
 └── logs/                       # Generated logs (git-ignored)
