@@ -22,14 +22,13 @@ class TelnetService(BaseService):
             username = username_data.decode('utf-8', errors='ignore').strip()
             
             if username:
-                self.log_command(client_ip, f"LOGIN_ATTEMPT: {username}")
-                
                 await self.send_line(writer, "Password: ")
                 password_data = await asyncio.wait_for(reader.readline(), timeout=30.0)
                 password = password_data.decode('utf-8', errors='ignore').strip()
-                
-                self.log_command(client_ip, f"PASSWORD: {password}")
-                
+
+                # Telnet always rejects: it only harvests credentials.
+                self.log_login(client_ip, username, password, False)
+
                 await asyncio.sleep(random.uniform(0.5, 1.5))
                 await self.send_line(writer, "\r\nLogin incorrect\r\n")
                 

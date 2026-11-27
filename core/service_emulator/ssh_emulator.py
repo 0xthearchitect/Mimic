@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from log_system import events
 
 class SSHService:
     
@@ -54,26 +55,20 @@ class SSHService:
             return f"{random.choice(prefixes)}-{random.choice(suffixes)}"
     
     def log_event(self, event_type: str, details: dict):
-        log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "event": event_type,
-            "service": "ssh",
-            "port": self.port,
-            **details
-        }
-        
+        details = dict(details)
+        client_ip = details.pop('client_ip', None)
+        events.emit("ssh", self.port, event_type, client_ip, **details)
+
+        # Human-readable line on stdout: the visual configurator shows these.
         try:
-            with open(self.log_file, 'a') as f:
-                f.write(json.dumps(log_entry) + '\n')
-            
             if event_type == "connection":
-                print(f"[SSH] Connection from {details.get('client_ip')}")
+                print(f"[SSH] Connection from {client_ip}")
             elif event_type == "login_attempt":
                 status = "✓" if details.get('success') else "✗"
-                print(f"[SSH] {status} Login: {details.get('username')} from {details.get('client_ip')}")
+                print(f"[SSH] {status} Login: {details.get('username')} from {client_ip}")
             elif event_type == "command":
                 print(f"[SSH] Cmd: {details.get('username')}: {details.get('command')}")
-        except:
+        except (OSError, UnicodeError):
             pass
     
     async def start(self):

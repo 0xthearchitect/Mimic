@@ -1,0 +1,37 @@
+# First time:
+#   cp config/honeypot.example.yaml config/honeypot.yaml   # then edit it
+#   docker compose up -d --build
+#
+# Watch activity:   docker compose logs -f
+# Export JSON logs: docker compose cp mimic:/app/logs ./mimic-logs
+#
+# Keep the port list below in sync with the services in honeypot.yaml.
+services:
+  mimic:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "21:21"
+      - "22:22"
+      - "23:23"
+      - "80:80"
+      - "3306:3306"
+    volumes:
+      - ./config/honeypot.yaml:/app/config/honeypot.yaml:ro
+      - mimic-logs:/app/logs
+      - mimic-ftp:/app/ftp_storage
+    # Non-root user may bind ports < 1024 inside the container only.
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
+    # Hardening: the container is meant to be attacked.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  mimic-logs:
+  mimic-ftp:

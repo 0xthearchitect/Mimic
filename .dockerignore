@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+**/__pycache__
+.pytest_cache
+logs
+ftp_storage
+config/honeypot.yaml
+tests
+assets
+*.md
+!README.md
