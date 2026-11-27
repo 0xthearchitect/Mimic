@@ -122,7 +122,23 @@ sudo pip3 install -r requirements.txt
 
 ### Running MIMIC
 
-#### Option 1: Visual Configurator (Recommended)
+#### Option 1: Web dashboard (Recommended)
+
+```bash
+python main.py --dashboard
+```
+
+MIMIC prints a private link (`http://127.0.0.1:8787/?token=…`). Open it in your browser:
+
+- **Playbill**: set the fake identity, house rules and services, then **Let the show begin**.
+- **The Stage**: live activity. *The script* tells each visit as a scene; *the house* seats every visitor by how deep they got (front row = got in and acted, back = refused or only knocked). Pick a seat to read their ticket, export their events or **show them out** (block the IP on every service).
+- **Lost & Found**: files left behind (SHA-256, who, how often) and the most-tried passwords.
+
+The dashboard only listens on this machine. From another computer, use an SSH tunnel:
+`ssh -L 8787:127.0.0.1:8787 you@honeypot-host`. The link changes every time MIMIC starts.
+Why it is built this way: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+#### Option 1b: Legacy visual configurator (pygame)
 
 **Windows:**
 ```bash
@@ -337,8 +353,12 @@ cat logs/*_honeypot.jsonl | jq -c 'select(.event == "login_attempt")'
 
 ```
 mimic/
-├── main.py                     # Entry point (headless)
-├── mimic.py                    # Visual configurator
+├── main.py                     # Entry point (headless, or --dashboard)
+├── mimic.py                    # Legacy pygame configurator
+├── dashboard/
+│   ├── server.py               # aiohttp app: API, live events, guards
+│   ├── store.py                # SQLite index over the JSONL logs
+│   └── static/                 # HTML, CSS, JS modules, vendored fonts
 ├── Dockerfile, docker-compose.yml
 ├── config/
 │   ├── honeypot.example.yaml   # Template (versioned)
@@ -355,7 +375,7 @@ mimic/
 │       └── ...
 ├── log_system/
 │   └── events.py               # Unified JSON Lines event log
-├── docs/LOG_FORMAT.md
+├── docs/LOG_FORMAT.md, docs/ARCHITECTURE.md
 ├── tests/
 ├── ftp_storage/                # Captured files (git-ignored)
 └── logs/                       # Generated logs (git-ignored)
