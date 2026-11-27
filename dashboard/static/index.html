@@ -43,13 +43,14 @@
       <div class="stage-grid">
         <section class="script" aria-labelledby="script-h">
           <div class="rule"><h2 class="section" id="script-h">The script</h2><span class="mono muted" style="font-size:13px">written live · newest scene first · one scene = one visitor on one door</span></div>
+          <div class="script-bar" id="script-bar"></div>
           <div id="scenes"></div>
         </section>
         <section class="house" aria-labelledby="house-h">
           <div class="rule"><h2 class="section" id="house-h">The house</h2><span class="mono muted" style="font-size:13px">last 24 h</span></div>
-          <p class="rule-text">Each seat is a visitor. <em>The closer to the stage, the deeper they got.</em></p>
-          <p class="muted" style="margin:0;font-size:14px">Row = how far they went. Seats fill left to right in order of arrival. Colour = how the door treated them. Pick a seat to read their ticket.</p>
-          <div class="legend"><span><i style="background:var(--in)"></i>got in</span><span><i style="background:var(--out)"></i>refused</span><span><i style="background:var(--knock)"></i>only knocked</span><span><i style="background:var(--knock);opacity:.35"></i>shown out (blocked)</span></div>
+          <p class="rule-text">Each seat is one visitor: one IP address. <em>The closer to the stage, the deeper they got.</em></p>
+          <p class="muted" style="margin:0;font-size:14px">Everything one IP does sits on one seat, however many doors it tries. Row = how far it got. Seats fill left to right in order of arrival. Colour = how the door treated it. Pick a seat to read its ticket.</p>
+          <div class="legend"><span><i style="background:var(--in)"></i>got in</span><span><i style="background:var(--out)"></i>refused</span><span><i style="background:var(--knock)"></i>only knocked</span><span><i style="background:var(--knock);opacity:.35"></i>blocked</span></div>
           <div class="hall" id="hall"></div>
           <div id="seat-ticket"></div>
         </section>
