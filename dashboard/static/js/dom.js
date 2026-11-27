@@ -56,6 +56,7 @@ export function ago(iso) {
 
 export function duration(iso) {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'under a minute';
   const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60);
   return hh ? `${hh} h ${mm} min` : `${mm} min`;
 }
